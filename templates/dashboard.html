@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM KPI Monitoring - Live Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes matrix-rain {
+            0% {
+                transform: translateY(-100%);
+                opacity: 0;
+            }
+
+            10% {
+                opacity: 1;
+            }
+
+            90% {
+                opacity: 1;
+            }
+
+            100% {
+                transform: translateY(100vh);
+                opacity: 0;
+            }
+        }
+
+        @keyframes pulse-glow {
+
+            0%,
+            100% {
+                box-shadow: 0 0 5px rgba(59, 130, 246, 0.5);
+            }
+
+            50% {
+                box-shadow: 0 0 20px rgba(59, 130, 246, 0.8);
+            }
+        }
+
+        @keyframes slide-up {
+            from {
+                transform: translateY(20px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .pulse-glow {
+            animation: pulse-glow 2s infinite;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .slide-up {
+            animation: slide-up 0.5s ease-out;
+        }
+
+        .matrix-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            opacity: 0.03;
+            z-index: 0;
+        }
+
+        .matrix-char {
+            position: absolute;
+            color: #0f0;
+            font-family: monospace;
+            font-size: 20px;
+            animation: matrix-rain linear infinite;
+        }
+
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+
+        .card-hover:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .metric-up {
+            color: #10b981;
+        }
+
+        .metric-down {
+            color: #ef4444;
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1f2937;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #4b5563;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6b7280;
+        }
+    </style>
+</head>
+
+<body class="bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white min-h-screen">
+    <!-- Matrix Background Effect -->
+    <div class="matrix-bg" id="matrix-bg"></div>
+
+    <!-- Header -->
+    <header class="bg-gray-900/80 backdrop-blur-sm border-b border-gray-700 shadow-2xl sticky top-0 z-50">
+        <div class="container mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1
+                        class="text-4xl font-bold bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 bg-clip-text text-transparent">
+                        🤖 LLM KPI Monitoring
+                    </h1>
+                    <p class="text-gray-400 text-sm mt-1">GenAI-Powered Real-Time API Intelligence</p>
+                </div>
+                <div class="flex items-center space-x-6">
+                    <!-- Generate Button -->
+                    <button onclick="generateLog()" id="generate-btn"
+                        class="flex items-center space-x-2 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white px-4 py-2 rounded-lg shadow-lg shadow-green-900/50 transition-all active:scale-95 group">
+                        <span class="text-xl">⚡</span>
+                        <span class="font-medium tracking-wide">GENERATE SIGNAL</span>
+                    </button>
+
+                    <!-- Connection Status -->
+                    <div class="flex items-center space-x-2 bg-gray-800 px-4 py-2 rounded-lg">
+                        <div id="ws-status" class="status-dot bg-yellow-500"></div>
+                        <span id="ws-status-text" class="text-sm text-gray-300">Connecting...</span>
+                    </div>
+                    <!-- Last Update -->
+                    <div class="text-right">
+                        <p class="text-xs text-gray-500">Last Update</p>
+                        <p id="last-update" class="text-sm text-gray-300">--:--:--</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-6 py-8 relative z-10">
+        <!-- KPI Cards Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <!-- Total Requests Card -->
+            <div
+                class="bg-gradient-to-br from-blue-900/40 to-blue-800/20 rounded-xl p-6 border border-blue-700/50 card-hover">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-gray-300 text-sm font-medium uppercase tracking-wide">Total Requests</h3>
+                    <div class="bg-blue-500/20 p-2 rounded-lg">
+                        <svg class="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z">
+                            </path>
+                        </svg>
+                    </div>
+                </div>
+                <p id="total-requests" class="text-4xl font-bold text-white mb-1">0</p>
+                <div class="flex items-center justify-between">
+                    <p class="text-xs text-gray-400">Last hour</p>
+                    <span id="requests-trend" class="text-xs metric-up">↑ 0%</span>
+                </div>
+            </div>
+
+            <!-- Success Rate Card -->
+            <div
+                class="bg-gradient-to-br from-green-900/40 to-green-800/20 rounded-xl p-6 border border-green-700/50 card-hover">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-gray-300 text-sm font-medium uppercase tracking-wide">Success Rate</h3>
+                    <div class="bg-green-500/20 p-2 rounded-lg">
+                        <svg class="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                </div>
+                <p id="success-rate" class="text-4xl font-bold text-green-400 mb-1">0%</p>
+                <div class="flex items-center justify-between">
+                    <p class="text-xs text-gray-400">2xx responses</p>
+                    <span id="error-count" class="text-xs text-red-400">0 errors</span>
+                </div>
+            </div>
+
+            <!-- Avg Latency Card -->
+            <div
+                class="bg-gradient-to-br from-yellow-900/40 to-yellow-800/20 rounded-xl p-6 border border-yellow-700/50 card-hover">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-gray-300 text-sm font-medium uppercase tracking-wide">Avg Latency</h3>
+                    <div class="bg-yellow-500/20 p-2 rounded-lg">
+                        <svg class="w-6 h-6 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                </div>
+                <p id="avg-latency" class="text-4xl font-bold text-yellow-400 mb-1">0ms</p>
+                <div class="flex items-center justify-between text-xs text-gray-400">
+                    <span>P95: <span id="p95-latency" class="text-yellow-300">0ms</span></span>
+                    <span>P99: <span id="p99-latency" class="text-yellow-300">0ms</span></span>
+                </div>
+            </div>
+
+            <!-- Anomalies Card -->
+            <div
+                class="bg-gradient-to-br from-red-900/40 to-red-800/20 rounded-xl p-6 border border-red-700/50 card-hover">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-gray-300 text-sm font-medium uppercase tracking-wide">Anomalies</h3>
+                    <div class="bg-red-500/20 p-2 rounded-lg">
+                        <svg class="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+                            </path>
+                        </svg>
+                    </div>
+                </div>
+                <p id="anomaly-count" class="text-4xl font-bold text-red-400 mb-1">0</p>
+                <div class="flex items-center justify-between">
+                    <p class="text-xs text-gray-400">Detected issues</p>
+                    <span id="critical-count" class="text-xs text-red-300">0 critical</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Anomaly Alerts -->
+        <div id="anomaly-alerts" class="mb-8"></div>
+
+        <!-- Recent Logs Table -->
+        <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-700 flex items-center justify-between bg-gray-900/50">
+                <h2
+                    class="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+                    📋 Recent API Logs
+                </h2>
+                <div class="flex space-x-3">
+                    <button onclick="refreshLogs()"
+                        class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition-all transform hover:scale-105">
+                        🔄 Refresh
+                    </button>
+                    <button onclick="clearLogs()"
+                        class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-medium transition-all">
+                        🗑️ Clear
+                    </button>
+                </div>
+            </div>
+            <div class="overflow-x-auto max-h-96">
+                <table class="w-full">
+                    <thead class="bg-gray-900/70 sticky top-0">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-300 uppercase tracking-wider">
+                                Timestamp</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-300 uppercase tracking-wider">
+                                Endpoint</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-300 uppercase tracking-wider">
+                                Method</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-300 uppercase tracking-wider">
+                                Status</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-300 uppercase tracking-wider">
+                                Latency</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-300 uppercase tracking-wider">
+                                Anomaly</th>
+                            <th class="px-6 py-3 text-left text-xs font-bold text-gray-300 uppercase tracking-wider">
+                                Analysis</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logs-table" class="divide-y divide-gray-700">
+                        <tr>
+                            <td colspan="7" class="px-6 py-12 text-center text-gray-500">
+                                <div class="flex flex-col items-center">
+                                    <svg class="w-16 h-16 text-gray-600 mb-4" fill="none" stroke="currentColor"
+                                        viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                                        </path>
+                                    </svg>
+                                    <p class="text-lg">No logs yet. Waiting for data...</p>
+                                    <p class="text-sm text-gray-600 mt-2">Send logs to POST /logs to see them here</p>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Footer Stats -->
+        <div class="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="bg-gray-800/30 rounded-lg p-4 border border-gray-700/50">
+                <p class="text-xs text-gray-400 uppercase">LLM Calls</p>
+                <p id="llm-calls" class="text-2xl font-bold text-purple-400">0</p>
+            </div>
+            <div class="bg-gray-800/30 rounded-lg p-4 border border-gray-700/50">
+                <p class="text-xs text-gray-400 uppercase">Total Tokens</p>
+                <p id="total-tokens" class="text-2xl font-bold text-blue-400">0</p>
+            </div>
+            <div class="bg-gray-800/30 rounded-lg p-4 border border-gray-700/50">
+                <p class="text-xs text-gray-400 uppercase">Estimated Cost</p>
+                <p id="total-cost" class="text-2xl font-bold text-green-400">$0.00</p>
+            </div>
+        </div>
+
+        <!-- Database Statistics Section -->
+        <div class="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- MongoDB Stats -->
+            <div class="bg-gradient-to-br from-green-900/20 to-green-800/10 rounded-xl p-6 border border-green-700/50">
+                <h3 class="text-xl font-bold mb-4 flex items-center">
+                    <svg class="w-6 h-6 text-green-400 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                        <path
+                            d="M17.193 9.555c-1.264-5.58-4.252-7.414-4.573-8.115-.28-.394-.53-.954-.735-1.44-.036.495-.055.685-.523 1.184-.723.566-4.438 3.682-4.74 10.02-.282 5.912 4.27 9.435 4.888 9.884l.07.05A73.49 73.49 0 0111.91 24h.481c.114-1.032.284-2.056.51-3.07.417-.296 4.604-3.254 4.291-11.375zM12 17.92c-.885-.87-1.94-2.19-2.11-4.9-.18-2.83.95-5.1 2.11-6.37 1.16 1.27 2.29 3.54 2.11 6.37-.17 2.71-1.225 4.03-2.11 4.9z" />
+                    </svg>
+                    <span class="bg-gradient-to-r from-green-400 to-emerald-500 bg-clip-text text-transparent">MongoDB
+                        Storage</span>
+                </h3>
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-400">Database:</span>
+                        <span id="mongo-db-name" class="text-white font-mono">-</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-400">API Logs:</span>
+                        <span id="mongo-logs-count" class="text-green-400 font-bold">0</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-400">Anomalies:</span>
+                        <span id="mongo-anomalies-count" class="text-red-400 font-bold">0</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-400">KPIs:</span>
+                        <span id="mongo-kpis-count" class="text-blue-400 font-bold">0</span>
+                    </div>
+                    <div class="border-t border-gray-700 pt-3 mt-3">
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-300 font-semibold">Total Documents:</span>
+                            <span id="mongo-total-docs" class="text-white font-bold text-lg">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pinecone Stats -->
+            <div
+                class="bg-gradient-to-br from-purple-900/20 to-purple-800/10 rounded-xl p-6 border border-purple-700/50">
+                <h3 class="text-xl font-bold mb-4 flex items-center">
+                    <svg class="w-6 h-6 text-purple-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10">
+                        </path>
+                    </svg>
+                    <span class="bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">Pinecone
+                        Vector DB</span>
+                </h3>
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-400">Index Name:</span>
+                        <span id="pinecone-index-name" class="text-white font-mono">-</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-400">Vector Count:</span>
+                        <span id="pinecone-vector-count" class="text-purple-400 font-bold">0</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-400">Dimension:</span>
+                        <span id="pinecone-dimension" class="text-blue-400 font-bold">384</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-400">Metric:</span>
+                        <span id="pinecone-metric" class="text-yellow-400 font-bold">cosine</span>
+                    </div>
+                    <div class="border-t border-gray-700 pt-3 mt-3">
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-300 font-semibold">Index Fullness:</span>
+                            <span id="pinecone-fullness" class="text-white font-bold text-lg">0%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Matrix Rain Effect (optimized)
+        function createMatrixRain() {
+            const container = document.getElementById('matrix-bg');
+            const chars = '01アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン';
+
+            // Limit to 15 characters to prevent performance issues
+            for (let i = 0; i < 15; i++) {
+                const span = document.createElement('span');
+                span.className = 'matrix-char';
+                span.textContent = chars[Math.floor(Math.random() * chars.length)];
+                span.style.left = Math.random() * 100 + '%';
+                span.style.animationDuration = (Math.random() * 3 + 2) + 's';
+                span.style.animationDelay = Math.random() * 5 + 's';
+                container.appendChild(span);
+            }
+        }
+
+        // WebSocket Management
+        let ws = null;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 10;
+        let pingInterval = null; // Store interval ID
+
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/live-kpis`;
+
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                console.log('✅ WebSocket connected');
+                updateConnectionStatus(true);
+                reconnectAttempts = 0;
+
+                ws.send('get_kpis');
+                ws.send('get_recent_logs');
+
+                // Clear any existing ping interval before creating new one
+                if (pingInterval) {
+                    clearInterval(pingInterval);
+                }
+
+                // Set up periodic ping
+                pingInterval = setInterval(() => {
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send('ping');
+                    }
+                }, 15000);
+            };
+
+            ws.onmessage = (event) => {
+                // Handle pong response
+                if (event.data === 'pong') {
+                    return;
+                }
+
+                try {
+                    const data = JSON.parse(event.data);
+                    handleWebSocketMessage(data);
+                    updateLastUpdate();
+                } catch (e) {
+                    console.error('Failed to parse WebSocket message:', event.data);
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error('❌ WebSocket error:', error);
+                updateConnectionStatus(false);
+            };
+
+            ws.onclose = () => {
+                console.log('🔌 WebSocket disconnected');
+                updateConnectionStatus(false);
+
+                // Clear ping interval on disconnect
+                if (pingInterval) {
+                    clearInterval(pingInterval);
+                    pingInterval = null;
+                }
+
+                if (reconnectAttempts < maxReconnectAttempts) {
+                    reconnectAttempts++;
+                    setTimeout(connectWebSocket, 3000 * reconnectAttempts);
+                }
+            };
+        }
+
+        function handleWebSocketMessage(data) {
+            switch (data.type) {
+                case 'initial_kpis':
+                case 'kpi_update':
+                    updateKPIs(data.data);
+                    break;
+                case 'recent_logs':
+                    updateLogsTable(data.data);
+                    break;
+                case 'new_log':
+                    addLogToTable(data.data);
+                    break;
+                case 'anomaly_alert':
+                    showAnomalyAlert(data.data);
+                    break;
+            }
+        }
+
+        function updateConnectionStatus(connected) {
+            const statusDot = document.getElementById('ws-status');
+            const statusText = document.getElementById('ws-status-text');
+
+            if (connected) {
+                statusDot.className = 'status-dot bg-green-500 pulse-glow';
+                statusText.textContent = 'Connected';
+            } else {
+                statusDot.className = 'status-dot bg-red-500';
+                statusText.textContent = 'Disconnected';
+            }
+        }
+
+        function updateLastUpdate() {
+            document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+        }
+
+        function updateKPIs(kpiData) {
+            document.getElementById('total-requests').textContent = kpiData.total_requests || 0;
+            document.getElementById('success-rate').textContent = (kpiData.success_rate || 0).toFixed(1) + '%';
+            document.getElementById('avg-latency').textContent = (kpiData.avg_latency || 0).toFixed(0) + 'ms';
+            document.getElementById('p95-latency').textContent = (kpiData.p95_latency || 0).toFixed(0) + 'ms';
+            document.getElementById('p99-latency').textContent = (kpiData.p99_latency || 0).toFixed(0) + 'ms';
+            document.getElementById('error-count').textContent = (kpiData.error_count || 0) + ' errors';
+        }
+
+        function updateLogsTable(logs) {
+            const tbody = document.getElementById('logs-table');
+
+            if (!logs || logs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-12 text-center text-gray-500"><div class="flex flex-col items-center"><svg class="w-16 h-16 text-gray-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg><p class="text-lg">No logs available</p></div></td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = logs.map(log => createLogRow(log)).join('');
+        }
+
+        function createLogRow(log) {
+            const statusClass = log.status_code >= 500 ? 'text-red-400 bg-red-900/20' :
+                log.status_code >= 400 ? 'text-yellow-400 bg-yellow-900/20' : 'text-green-400 bg-green-900/20';
+
+            const anomalyBadge = log.is_anomaly ?
+                `<span class="px-3 py-1 text-xs font-bold rounded-full bg-red-900 text-red-200 border border-red-700">${log.anomaly_severity || 'YES'}</span>` :
+                '<span class="text-gray-500">-</span>';
+
+            const timestamp = new Date(log.timestamp).toLocaleTimeString();
+            const analysis = log.llm_analysis ?
+                `<span class="text-xs text-gray-400 truncate max-w-xs block" title="${log.llm_analysis}">${log.llm_analysis.substring(0, 50)}...</span>` :
+                '<span class="text-gray-600">-</span>';
+
+            return `
+                <tr class="hover:bg-gray-700/50 transition-all slide-up">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300 font-mono">${timestamp}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-blue-300 font-mono">${log.endpoint}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">${log.method}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm ${statusClass} font-bold px-3 py-1 rounded">${log.status_code}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-yellow-300 font-semibold">${log.latency.toFixed(0)}ms</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">${anomalyBadge}</td>
+                    <td class="px-6 py-4 text-sm">${analysis}</td>
+                </tr>
+            `;
+        }
+
+        function addLogToTable(log) {
+            const tbody = document.getElementById('logs-table');
+            const newRow = createLogRow(log);
+            tbody.insertAdjacentHTML('afterbegin', newRow);
+
+            while (tbody.children.length > 100) {
+                tbody.removeChild(tbody.lastChild);
+            }
+        }
+
+        function showAnomalyAlert(anomaly) {
+            const alertsContainer = document.getElementById('anomaly-alerts');
+            const severityColors = {
+                'CRITICAL': 'border-red-500 bg-red-900/30',
+                'HIGH': 'border-orange-500 bg-orange-900/30',
+                'MEDIUM': 'border-yellow-500 bg-yellow-900/30',
+                'LOW': 'border-blue-500 bg-blue-900/30'
+            };
+
+            const color = severityColors[anomaly.anomaly_severity] || severityColors['MEDIUM'];
+
+            const alert = document.createElement('div');
+            alert.className = `border-l-4 ${color} p-6 mb-4 rounded-r-xl backdrop-blur-sm slide-up`;
+            alert.innerHTML = `
+                <div class="flex items-start">
+                    <svg class="w-8 h-8 text-red-400 mr-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                    </svg>
+                    <div class="flex-1">
+                        <h3 class="text-xl font-bold text-white mb-2">🚨 Anomaly Detected: ${anomaly.anomaly_severity}</h3>
+                        <p class="text-gray-200 mb-2"><strong>Endpoint:</strong> ${anomaly.endpoint}</p>
+                        <p class="text-gray-300 mb-3">${anomaly.anomaly_reason}</p>
+                        <p class="text-sm text-gray-400 bg-gray-900/50 p-3 rounded">${anomaly.llm_analysis || 'No analysis available'}</p>
+                    </div>
+                    <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-gray-400 hover:text-white">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+            `;
+
+            alertsContainer.insertBefore(alert, alertsContainer.firstChild);
+            setTimeout(() => alert.remove(), 60000);
+
+            const currentCount = parseInt(document.getElementById('anomaly-count').textContent);
+            document.getElementById('anomaly-count').textContent = currentCount + 1;
+        }
+
+        function refreshLogs() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send('get_recent_logs');
+                ws.send('get_kpis');
+            }
+        }
+
+        function clearLogs() {
+            document.getElementById('logs-table').innerHTML = '<tr><td colspan="7" class="px-6 py-12 text-center text-gray-500">Logs cleared</td></tr>';
+        }
+
+        // Fetch LLM metrics periodically
+        async function fetchLLMMetrics() {
+            try {
+                const response = await fetch('/kpis/llm-metrics?time_range=1h');
+                const data = await response.json();
+                if (data.success && data.llm_metrics) {
+                    document.getElementById('llm-calls').textContent = data.llm_metrics.total_llm_calls || 0;
+                    document.getElementById('total-tokens').textContent = (data.llm_metrics.total_input_tokens + data.llm_metrics.total_output_tokens || 0).toLocaleString();
+                    document.getElementById('total-cost').textContent = '$' + (data.llm_metrics.total_cost || 0).toFixed(4);
+                }
+            } catch (error) {
+                console.error('Failed to fetch LLM metrics:', error);
+            }
+        }
+
+        // Fetch database statistics
+        async function fetchDatabaseStats() {
+            try {
+                const response = await fetch('/stats/databases');
+                const data = await response.json();
+
+                if (data.success) {
+                    // Update MongoDB stats
+                    if (data.mongodb) {
+                        document.getElementById('mongo-db-name').textContent = data.mongodb.database || '-';
+                        if (data.mongodb.collections) {
+                            document.getElementById('mongo-logs-count').textContent = (data.mongodb.collections.api_logs || 0).toLocaleString();
+                            document.getElementById('mongo-anomalies-count').textContent = (data.mongodb.collections.anomalies || 0).toLocaleString();
+                            document.getElementById('mongo-kpis-count').textContent = (data.mongodb.collections.kpis || 0).toLocaleString();
+                            document.getElementById('mongo-total-docs').textContent = (data.mongodb.collections.total_documents || 0).toLocaleString();
+                        }
+                    }
+
+                    // Update Pinecone stats
+                    if (data.pinecone) {
+                        document.getElementById('pinecone-index-name').textContent = data.pinecone.index_name || '-';
+                        document.getElementById('pinecone-vector-count').textContent = (data.pinecone.total_vector_count || 0).toLocaleString();
+                        document.getElementById('pinecone-dimension').textContent = data.pinecone.dimension || 384;
+                        document.getElementById('pinecone-metric').textContent = data.pinecone.metric || 'cosine';
+                        document.getElementById('pinecone-fullness').textContent = ((data.pinecone.index_fullness || 0) * 100).toFixed(2) + '%';
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to fetch database stats:', error);
+            }
+        }
+
+        // Initialize
+        createMatrixRain();
+        connectWebSocket();
+        fetchLLMMetrics();
+        fetchDatabaseStats();
+
+        // Periodic updates
+        setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send('get_kpis');
+            }
+        }, 10000);
+
+        setInterval(fetchLLMMetrics, 30000);
+        setInterval(fetchDatabaseStats, 60000); // Update database stats every minute
+
+        // LOG GENERATION
+        async function generateLog() {
+            const btn = document.getElementById('generate-btn');
+            const originalContent = btn.innerHTML;
+
+            try {
+                btn.innerHTML = '<span class="animate-spin">🔄</span><span>GENERATING...</span>';
+                btn.disabled = true;
+                btn.classList.add('opacity-75', 'cursor-not-allowed');
+
+                const response = await fetch('/logs/generate', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    // Flash success
+                    btn.innerHTML = '<span class="text-xl">✅</span><span>SIGNAL SENT</span>';
+                    btn.classList.remove('from-green-600', 'to-green-500');
+                    btn.classList.add('from-blue-600', 'to-blue-500');
+
+                    setTimeout(() => {
+                        btn.innerHTML = originalContent;
+                        btn.disabled = false;
+                        btn.classList.remove('opacity-75', 'cursor-not-allowed', 'from-blue-600', 'to-blue-500');
+                        btn.classList.add('from-green-600', 'to-green-500');
+                    }, 1000);
+                } else {
+                    console.error(data.error);
+                    alert("Error: " + (data.error || "Unknown error"));
+                }
+            } catch (e) {
+                console.error(e);
+                btn.innerHTML = '<span>❌</span><span>ERROR</span>';
+                setTimeout(() => {
+                    btn.innerHTML = originalContent;
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-75', 'cursor-not-allowed');
+                }, 2000);
+            }
+        }
+    </script>
+</body>
+
+</html>
