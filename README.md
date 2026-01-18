@@ -1,6 +1,8 @@
 # LLM KPI Monitoring System
 
 A production-ready API monitoring system powered by Large Language Models (Groq/Llama 3), LangGraph, and Vector Databases (Pinecone).
+# Dashboard
+<img width="937" height="440" alt="image" src="https://github.com/user-attachments/assets/87291e98-b653-49ab-8caf-0ea9f995216d" />
 
 ## 🚀 Features
 
